@@ -13,15 +13,15 @@ const uint8_t ledPin = 5;
 uint8_t _2posSw = 2;
 bool _2posSwValue;
 int8_t pot = A6;
-uint8_t  maxPWMsteps = 255;
-uint16_t fadeDelay = 210;
+uint8_t  maxPWMsteps = 254;
+uint16_t fadeDelay = 10;
 uint8_t  brightness = 0;
 uint16_t daytimeStart = 612;
 uint16_t daytimeEnd = 1948;
 const uint8_t piezoPin = 2;
 unsigned long int lastIteration = 0;
-byte LightOn = 0;
-char illuminate[8];
+bool lightOn;
+char illuminate[16];
 
 bool checkDaytime() {
   DateTime now = rtc.now();
@@ -51,6 +51,7 @@ void updateLCD(uint16_t interval = 1000) {
     lcd.setCursor(13, 1);
     lcd.print((char)223); //ascii number for degrees symbol
     lcd.print("F");
+    //Serial.println(now.toString(buf2));
   }
 }
 
@@ -64,7 +65,7 @@ void setup() {
   lcd.begin(16, 2);
   lcd.setCursor(0, 0);
   lcd.print("Aquatroller 1.0");
-  delay(800);
+  //delay(800);
 
   if (! rtc.begin()) {
     Serial.println("Couldn't find RTC");
@@ -79,22 +80,24 @@ void setup() {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("CHECKING TIME...");
-  delay(1000);
+  //delay(1000);
 
   DateTime now = rtc.now();
 
   if (checkDaytime()) {
+
     lcd.setCursor(0, 1);
     lcd.print("DAY MODE");
-    delay(1200);
-    LightOn = 1;
+    //delay(1200);
+//    Serial.println("Day Mode");
+    lightOn = 1;
     lcd.setBacklight(HIGH);
-
     uint8_t brightness = 0;
     uint8_t lastPercent;
+    //delay(1500);
     while (brightness < maxPWMsteps) {
       analogWrite(ledPin, brightness);
-      uint8_t percent = map(brightness, 0, maxPWMsteps, 0, 100);
+      uint16_t percent = map(brightness, 0, maxPWMsteps, 0, 100); //even though the percent var can only go up to 100, it still occupies more memory than 8bits uint8_t so must use 16nit mem allocation.
       if (percent != lastPercent) {
         sprintf(illuminate, "ILLUMINATING %d%%", percent);
         lcd.setCursor(0, 1);
@@ -104,21 +107,62 @@ void setup() {
       brightness++;
       delay(fadeDelay);
     }
-
   } else {
     lcd.setCursor(0, 1);
     lcd.print("NIGHT MODE");
     delay(2000);
-    LightOn = 0;
+    lightOn = 0;
     lcd.setBacklight(LOW);
     updateLCD();
   }
 }
 
-void lightfadeOn(uint16_t y = fadeDelay, uint8_t z = maxPWMsteps) {
+void lightFade(int8_t x) {
+//  Serial.print("running lightfade value of x = ");
+//  Serial.println(x);
+//  Serial.print("brightness = ");
+//  Serial.println(brightness);
+  char illuminate[16];
+  //  uint8_t brightness = 0;
+  uint8_t lastPercent;
+  while ((brightness > 0) && (brightness < 255))
+  {
+    brightness = brightness + x;
+    analogWrite(ledPin, brightness);
 
-  char illuminate[8];
-  uint8_t brightness = 0;
+//    Serial.println(brightness);
+    if ((x == 1) && (brightness == 140))
+    {
+      lcd.setBacklight(HIGH);
+//      Serial.println("lcd is on");
+    }
+    else if ((x == -1) && (brightness == 140))
+    {
+      lcd.setBacklight(LOW);
+//      Serial.println("lcd is off");
+    }
+    else {
+      break;
+    }
+
+    uint16_t percent = map(brightness, 0, maxPWMsteps, 0, 100);
+    if (percent != lastPercent)
+    {
+      sprintf(illuminate, "ILLUMINATING %d%", percent);
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print(illuminate);
+    }
+    lastPercent = percent;
+
+    delay(fadeDelay);
+  }
+  Serial.println("end of lightfade");
+}
+
+void lightFadeOn(uint16_t y = fadeDelay, uint8_t z = maxPWMsteps) {
+  char illuminate[16];
+//  uint8_t brightness = 0;
   uint8_t lastPercent;
   while ( brightness < z)
   {
@@ -127,7 +171,7 @@ void lightfadeOn(uint16_t y = fadeDelay, uint8_t z = maxPWMsteps) {
     {
       lcd.setBacklight(HIGH);
     }
-    uint8_t percent = map(brightness, 0, z, 0, 100);
+    uint16_t percent = map(brightness, 0, z, 0, 100);
     if (percent != lastPercent)
     {
       sprintf(illuminate, "ILLUMINATING %d%", percent);
@@ -141,7 +185,7 @@ void lightfadeOn(uint16_t y = fadeDelay, uint8_t z = maxPWMsteps) {
   }
 }
 
-void lightfadeOff(uint16_t y = fadeDelay, uint8_t z = maxPWMsteps) {
+void lightFadeOff(uint16_t y = fadeDelay, uint8_t z = maxPWMsteps) {
 
   char dim[8];
   uint8_t lastPercent;
@@ -154,7 +198,7 @@ void lightfadeOff(uint16_t y = fadeDelay, uint8_t z = maxPWMsteps) {
       lcd.setBacklight(LOW);
     }
 
-    uint8_t percent = map(brightness, 0, z, 0, 100);
+    uint16_t percent = map(brightness, 0, z, 0, 100);
     if (percent != lastPercent)
     {
       sprintf(dim, "DIMMING %d%", percent);
@@ -168,12 +212,17 @@ void lightfadeOff(uint16_t y = fadeDelay, uint8_t z = maxPWMsteps) {
   }
 }
 
-void loop() {
 
+void loop() {
+//    Serial.print("lightOn = ");
+//    Serial.println(lightOn);
+//    Serial.print("brightness = ");
+//    Serial.println(brightness);
   _2posSwValue = digitalRead(_2posSw);
 
   while (_2posSwValue == HIGH)
   {
+//    Serial.println("_2posSw loop");
     uint16_t potValue = analogRead(pot);
     potValue = map(potValue, 0, 1024, 0, maxPWMsteps);
     analogWrite(ledPin, potValue);
@@ -181,56 +230,36 @@ void loop() {
       break;
     }
   }
-
   if (checkDaytime())
   {
-    if (LightOn == 0)
-    {
-      LightOn = 1;
-      lightfadeOn();
-    }
-    else
-    {
-      analogWrite(ledPin, 255);
+//    Serial.println("it's daytime mf-ers");
+    switch (lightOn) {
+      case 0:
+//        Serial.println("daytime & light is currently off, running lightFade(1)");
+//        brightness = 1;
+        lightFadeOn();
+        lightOn = !lightOn;
+        break;
+      case 1:
+//        Serial.println("daytime & light is currently on, keeping light on");
+        analogWrite(ledPin, 255);
+        break;
     }
   }
-  else //must be night
-  {
-    if (LightOn == 1)
-    {
-      LightOn = 0;
-      lightfadeOff();
-    }
-    else
-    {
-      analogWrite(ledPin, 0);
+  else {
+    switch (lightOn) {
+      case 1:
+//        Serial.println("nighttime & light is currently on, running lightFade(-1)");
+//        brightness = 254;
+        lightFadeOff();
+        lightOn = !lightOn;
+        break;
+      case 0:
+//        Serial.println("nighttime & light is currently off, keeping light off");
+        analogWrite(ledPin, 0);
+        break;
     }
   }
 
   updateLCD(1000);
 }
-//  if (_2posSwValue == HIGH)           // _2posSw voltage is high
-//  {
-//    if (checkDaytime())
-//    {
-//      if (LightOn == 0)
-//      {
-//        LightOn = 1;
-//        lightfadeOn();
-//      }
-//    }
-//
-//    else  {
-//      if (LightOn == 1)
-//      {
-//        LightOn = 0;
-//        lightfadeOff();
-//      }
-//    }
-//  } else  {        // _2posSw voltage is low or shorted to ground
-//
-//    uint16_t potValue = analogRead(pot);
-//    potValue = map(potValue, 0, 1024, 0, maxPWMsteps);
-//    analogWrite(ledPin, potValue);
-//    LightOn = 0;
-//  }
